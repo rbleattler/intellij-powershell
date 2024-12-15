@@ -156,12 +156,25 @@ internal fun isReferenceDoubleColonOperator(type: IElementType): Boolean {
   return type === PowerShellTypes.COLON2
 }
 
-internal fun isUnaryOperator(node: ASTNode): Boolean {
+internal fun isWhitespaceRequiringUnaryOperator(node: ASTNode): Boolean {
   if (node.psi.context !is PowerShellUnaryExpression) return false
   val type = node.elementType
-  val text = node.text
-  return type === PowerShellTypes.OP_BNOT || type === PowerShellTypes.EXCL_MARK || type === PowerShellTypes.OP_NOT || type === PowerShellTypes.MM || type === PowerShellTypes.PP || type === PowerShellTypes.COMMA || type === PowerShellTypes.PLUS || type === PowerShellTypes.DASH
-      || (type === PowerShellTypes.OP_C && (text.contains("split") || text.contains("join")))
+  return type === PowerShellTypes.OP_NOT || type === PowerShellTypes.OP_BNOT
+}
+
+/**
+ * By "whitespace-flexible", I mean that the operator may be joined to the next expression: whitespace may be omitted.
+ * For example, unary plus may be joined, while unary `-Not` may not.
+ */
+internal fun isWhitespaceFlexibleUnaryOperator(node: ASTNode): Boolean {
+  if (node.psi.context !is PowerShellUnaryExpression) return false
+  val type = node.elementType
+  return type === PowerShellTypes.EXCL_MARK
+    || type === PowerShellTypes.MM
+    || type === PowerShellTypes.PP
+    || type === PowerShellTypes.COMMA
+    || type === PowerShellTypes.PLUS
+    || type === PowerShellTypes.DASH
 }
 
 internal fun isComparisonOperator(type: IElementType): Boolean {
@@ -177,7 +190,10 @@ internal fun isBitwiseOperator(type: IElementType): Boolean {
 }
 
 internal fun isLogicalOperator(type: IElementType): Boolean {
-  return type == PowerShellTypes.OP_AND || type == PowerShellTypes.OP_OR || type == PowerShellTypes.OP_XOR
+  return type == PowerShellTypes.OP_AND
+    || type == PowerShellTypes.OP_OR
+    || type == PowerShellTypes.OP_XOR
+    || type == PowerShellTypes.DOUBLE_QUESTION_MARK
 }
 
 internal fun isAssignmentOperator(type: IElementType): Boolean {
@@ -252,8 +268,37 @@ internal fun isFirstNodeInParameter(node: ASTNode, checkFirstParameter: Boolean 
 }
 
 internal fun canBeParameter(node: ASTNode): Boolean {
-  return node.elementType === PowerShellTypes.ATTRIBUTE
-      || node.elementType === PowerShellTypes.TARGET_VARIABLE_EXPRESSION
+  if (node.elementType === PowerShellTypes.ATTRIBUTE) {
+    // If the current node is an attribute, and it is contained in a parameter block, we should skip it if it annotates
+    // a cmdlet attribute block.
+    //
+    // According to the current PSI structure, this is the case if the current node is at the beginning of the block, or
+    // is preceded by other attributes only.
+    //
+    // Example structure that we are trying to handle here:
+    // [CmdLetBinding()] # this should not be considered as a part of a parameter
+    // param (
+    //   [Parameter] # this attribute is a part of a parameter
+    //   $foo
+    // )
+
+    // Not a block parameter — should be function parameters then, we don't care:
+    if (!isBlockParameterClauseContext(node)) return true
+
+    // Now, enumerate the node's preceding siblings to see if there are any non-attribute ones. Normally, we should
+    // pretty quickly hit either a non-attribute part of a previous parameter, or the block beginning.
+    var currentNode: ASTNode? = node
+    while (currentNode != null) {
+      currentNode = findSiblingSkippingWS(currentNode, forward = false)
+      if (currentNode != null && currentNode.elementType !== PowerShellTypes.ATTRIBUTE)
+        // not an attribute encountered means the current attribute node is not in the position before the param() block
+        return true
+    }
+    // No non-attributes encountered before this element, means it is in the initial attribute block, so it should not
+    // be treated as a possible parameter attribute.
+    return false
+  }
+  return node.elementType === PowerShellTypes.TARGET_VARIABLE_EXPRESSION
       || node.elementType === PowerShellTypes.EQ
       || node.psi is PowerShellExpression
 }

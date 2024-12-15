@@ -15,36 +15,43 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        image: [macos-12, ubuntu-22.04, windows-2022]
+        image: [macos-14, ubuntu-24.04, windows-2022]
       fail-fast: false
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Setup Java
-        uses: actions/setup-java@v3
+      - if: matrix.image == 'ubuntu-24.04'
+        name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
         with:
-          distribution: 'corretto'
-          java-version: '17'
+          tool-cache: false
+          large-packages: false
 
-      - name: "Validate Gradle wrapper"
-        uses: gradle/wrapper-validation-action@v1
+      - name: "Check out the sources"
+        uses: actions/checkout@v4
+
+      - name: Cache downloaded JDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/gradle-jvm
+            ~/AppData/Local/gradle-jvm
+          key: ${{ runner.os }}-${{ hashFiles('gradlew*') }}
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Build
         run: ./gradlew build
 
-      - name: 'Upload test results'
-        uses: actions/upload-artifact@v3
+      - name: 'Upload build reports'
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ runner.os }}.test-results
-          path: build/reports/tests
+          name: ${{ runner.os }}.reports
+          path: build/reports
         if: ${{ always() }}
 
       - name: 'Upload test logs'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ runner.os }}.test-logs
-          path: build/idea-sandbox/system-test/log
+          path: build/idea-sandbox/*/log-test
         if: ${{ always() }}

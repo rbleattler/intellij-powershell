@@ -5,16 +5,18 @@ import com.intellij.openapi.util.io.FileUtil
 import com.intellij.plugin.powershell.lang.lsp.languagehost.PowerShellExtensionError
 import com.intellij.plugin.powershell.lang.lsp.languagehost.PowerShellNotInstalled
 import com.intellij.util.EnvironmentUtil
-
+import com.intellij.util.text.nullize
+import java.nio.file.Path
+import kotlin.io.path.Path
 
 @Throws(PowerShellNotInstalled::class)
 fun findPsExecutable(): String {
   val osPath = EnvironmentUtil.getValue("PATH") ?: throw PowerShellNotInstalled("Can not get OS PATH")
   val paths = osPath.split(if (SystemInfo.isWindows) ";" else ":")
   val suf = if (SystemInfo.isWindows) ".exe" else ""
-  val exec = arrayListOf("powershell$suf", "pwsh$suf")
-  paths.forEach { p ->
-    exec.forEach { e ->
+  val exec = arrayListOf("pwsh$suf", "powershell$suf")
+  exec.forEach { e ->
+    paths.forEach { p ->
       val answer = join(p, e)
       if (checkExists(answer)) return answer
     }
@@ -46,6 +48,11 @@ fun join(vararg pathPart: String): String {
   return FileUtil.toCanonicalPath(FileUtil.join(*pathPart))
 }
 
-fun getDefaultWorkingDirectory(): String {
-  return EnvironmentUtil.getValue("HOME") ?: System.getProperty("user.home") ?: System.getProperty("user.dir") ?: ""
+fun getDefaultWorkingDirectory(scriptPath: Path?): Path {
+  val workingDir = scriptPath?.parent
+  if (workingDir != null) return workingDir
+
+  val directory = (System.getProperty("user.home") ?: System.getProperty("user.dir"))
+    .nullize(nullizeSpaces = true) ?: "."
+  return Path(directory)
 }

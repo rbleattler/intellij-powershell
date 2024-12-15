@@ -13,6 +13,7 @@ import com.intellij.patterns.ElementPattern
 import com.intellij.patterns.PatternCondition
 import com.intellij.patterns.PlatformPatterns.psiElement
 import com.intellij.patterns.StandardPatterns.or
+import com.intellij.plugin.powershell.ide.debugger.documentSessionKey
 import com.intellij.plugin.powershell.ide.resolve.*
 import com.intellij.plugin.powershell.ide.search.PowerShellComponentType
 import com.intellij.plugin.powershell.lang.lsp.ide.EditorEventManager
@@ -55,6 +56,8 @@ class PowerShellCompletionContributor : CompletionContributor() {
   }
 
   override fun fillCompletionVariants(parameters: CompletionParameters, result: CompletionResultSet) {
+    if(parameters.editor.document.getUserData(documentSessionKey) != null)
+      return
     @Suppress("UnstableApiUsage") val gotResultFromHost = runBlockingCancellable {
       getCompletionFromLanguageHost(parameters, result)
     }
@@ -154,7 +157,7 @@ class PowerShellCompletionContributor : CompletionContributor() {
             val qType = expr.qualifier?.getType()
             if (qType != null && qType != PowerShellType.UNKNOWN) {
               val membersProcessor = PowerShellMemberScopeProcessor()
-              PowerShellResolveUtil.processMembersForType(qType, true, membersProcessor)
+              PowerShellResolveUtil.processMembersForType(qType, membersProcessor)
               val res = membersProcessor.getResult()
               res.map { it.element }.filter { it !is PowerShellConstructorDeclarationStatement }.forEach { result.addElement(buildLookupElement(it, context)) }
               if (expr.isTypeMemberAccess()) {

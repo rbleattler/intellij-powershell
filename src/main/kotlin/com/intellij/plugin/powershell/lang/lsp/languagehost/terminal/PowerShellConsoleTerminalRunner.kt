@@ -29,6 +29,7 @@ import com.intellij.terminal.JBTerminalWidget
 import com.intellij.terminal.pty.PtyProcessTtyConnector
 import com.intellij.util.EnvironmentUtil
 import com.intellij.util.ModalityUiUtil
+import com.intellij.util.application
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.jediterm.terminal.TtyConnector
 import com.jediterm.terminal.ui.TerminalWidget
@@ -79,11 +80,15 @@ class PowerShellConsoleTerminalRunner(project: Project) : EditorServicesLanguage
         EnvironmentUtil.setLocaleEnv(envs, charset("UTF-8"))
       }
       try {
+        val workingDirectory = if (application.isUnitTestMode) {
+          project.basePath ?: error("Project has no base path.")
+        } else TerminalProjectOptionsProvider.getInstance(project).startingDirectory
+
         val logFile = File(PathManager.getLogPath(), "pty-ps.log")
         logFile.createNewFile()
         return PtyProcessBuilder(command)
             .setEnvironment(envs)
-            .setDirectory(TerminalProjectOptionsProvider.getInstance(project).startingDirectory)
+            .setDirectory(workingDirectory)
             .setConsole(false)
             .setCygwin(false)
             .setLogFile(logFile)
@@ -100,7 +105,7 @@ class PowerShellConsoleTerminalRunner(project: Project) : EditorServicesLanguage
 
   override fun getLogFileName(): String = "EditorServices-IJ-Console-${getSessionCount()}"
 
-  override fun createProcess(project: Project, command: List<String>, environment: Map<String, String>?): PtyProcess {
+  override fun createProcess(command: List<String>, environment: Map<String, String>?): PtyProcess {
     LOG.info("Language server starting... exe: '$command'")
     val process = createPtyProcess(myProject, command.toTypedArray(), environment)
     try {
@@ -128,7 +133,7 @@ class PowerShellConsoleTerminalRunner(project: Project) : EditorServicesLanguage
 
     val panel = JPanel(BorderLayout())
     panel.add(actionToolbar.component, BorderLayout.WEST)
-    actionToolbar.setTargetComponent(panel)
+      actionToolbar.targetComponent = panel
 
     val processHandler = PSPtyProcessHandler(this, process, "PowerShell console process")
     val contentDescriptor = RunContentDescriptor(null, processHandler, panel, "PowerShell Terminal Console")

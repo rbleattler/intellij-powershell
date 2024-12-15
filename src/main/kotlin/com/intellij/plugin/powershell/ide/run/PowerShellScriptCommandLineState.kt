@@ -13,24 +13,31 @@ import com.intellij.execution.runners.ProgramRunner
 import com.intellij.execution.util.ProgramParametersUtil
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.diagnostic.logger
+import com.intellij.openapi.options.advanced.AdvancedSettings
 import com.intellij.openapi.roots.ProjectRootManager
+import com.intellij.openapi.util.io.NioFiles.toPath
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.plugin.powershell.ide.runAndLogException
 import com.intellij.plugin.powershell.lang.lsp.LSPInitMain
 import com.intellij.plugin.powershell.lang.lsp.languagehost.PowerShellNotInstalled
 import com.intellij.terminal.TerminalExecutionConsole
+import com.intellij.util.text.nullize
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.annotations.TestOnly
 import java.io.File
+import java.nio.charset.Charset
 import java.nio.file.Path
 import java.util.regex.Pattern
-import kotlin.io.path.Path
 
 class PowerShellScriptCommandLineState(
-  private val runConfiguration: PowerShellRunConfiguration,
-  private val environment: ExecutionEnvironment) : RunProfileState {
+  val runConfiguration: PowerShellRunConfiguration,
+  private val environment: ExecutionEnvironment
+) : RunProfileState {
 
-  private lateinit var workingDirectory: Path
+  @TestOnly
+  lateinit var workingDirectory: Path
   suspend fun prepareExecution() {
     val project = runConfiguration.project
     val file = withContext(Dispatchers.IO) { LocalFileSystem.getInstance().findFileByIoFile(File(runConfiguration.scriptPath)) }
@@ -39,9 +46,9 @@ class PowerShellScriptCommandLineState(
         ProjectRootManager.getInstance(project).fileIndex.getModuleForFile(it)
       }
     }
-    workingDirectory = Path(
-      ProgramParametersUtil.expandPathAndMacros(runConfiguration.workingDirectory, module, project)
-    )
+    workingDirectory = runConfiguration.customWorkingDirectory.nullize(nullizeSpaces = true)?.let {
+      toPath(ProgramParametersUtil.expandPathAndMacros(it, module, project))
+    } ?: getDefaultWorkingDirectory(toPath(runConfiguration.scriptPath))
   }
 
   private fun startProcess(): ProcessHandler {
@@ -55,6 +62,7 @@ class PowerShellScriptCommandLineState(
       val commandLine = PtyCommandLine(command)
         .withConsoleMode(false)
         .withWorkDirectory(workingDirectory.toString())
+        .withCharset(getTerminalCharSet())
 
       runConfiguration.environmentVariables.configureCommandLine(commandLine, true)
       logger.debug("Command line: $command")
@@ -102,6 +110,11 @@ class PowerShellScriptCommandLineState(
     val console = TerminalExecutionConsole(environment.project, process)
     return DefaultExecutionResult(console, process)
   }
+}
+
+private fun getTerminalCharSet(): Charset {
+  val name = AdvancedSettings.getString("terminal.character.encoding")
+  return logger.runAndLogException { charset(name) } ?: Charsets.UTF_8
 }
 
 private val logger = logger<PowerShellScriptCommandLineState>()

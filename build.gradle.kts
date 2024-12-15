@@ -1,23 +1,23 @@
-import org.jetbrains.intellij.tasks.PrepareSandboxTask
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.security.MessageDigest
+import java.util.zip.ZipFile
 
 plugins {
   id("java")
-  id("org.jetbrains.changelog") version "2.2.0"
-  id("org.jetbrains.grammarkit") version "2022.3.2.2"
-  id("org.jetbrains.intellij") version "1.15.0"
-  id("org.jetbrains.kotlin.jvm") version "1.9.0"
-}
-
-intellij {
-  type.set("IC")
-  version.set("2023.2")
-  plugins.set(listOf("org.intellij.intelliLang", "terminal"))
-  pluginName.set("PowerShell")
+  alias(libs.plugins.changelog)
+  alias(libs.plugins.gradleJvmWrapper)
+  alias(libs.plugins.grammarkit)
+  alias(libs.plugins.intellijPlatform)
+  alias(libs.plugins.kotlin)
 }
 
 sourceSets {
   main {
-    java.srcDir("src/main/gen")
+    java.srcDir("src/main/gen-parser")
+    java.srcDir("src/main/gen-lexer")
     resources {
       exclude("**.bnf")
       exclude("**.flex")
@@ -25,23 +25,83 @@ sourceSets {
   }
 }
 
+val pluginVersion: String by ext.properties
 group = "com.intellij.plugin"
-version = "2.3.1"
+version = pluginVersion
 
 repositories {
+  intellijPlatform {
+    defaultRepositories()
+  }
+
   mavenCentral()
-  maven {
-    setUrl("https://mvnrepository.com/artifact/com.kohlschutter.junixsocket/junixsocket-common")
+  ivy {
+    url = uri("https://github.com/PowerShell/PSScriptAnalyzer/releases/download/")
+    patternLayout { artifact("v[revision]/[module].[revision].[ext]") }
+    content { includeGroup("PSScriptAnalyzer") }
+    metadataSources { artifact() }
+  }
+  ivy {
+    url = uri("https://github.com/PowerShell/PowerShellEditorServices/releases/download/")
+    patternLayout { artifact("v[revision]/[module].[ext]") }
+    content { includeGroup("PowerShellEditorServices") }
+    metadataSources { artifact() }
   }
 }
 
-dependencies {
-  implementation("com.kohlschutter.junixsocket:junixsocket-common:2.3.3")
-  implementation("com.kohlschutter.junixsocket:junixsocket-native-common:2.3.3")
+val psScriptAnalyzerVersion: String by project
+val psScriptAnalyzerSha256Hash: String by project
+val psScriptAnalyzer: Configuration by configurations.creating
 
-  implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:0.3.0")
+val psesVersion: String by project
+val psesSha256Hash: String by project
+val powerShellEditorServices: Configuration by configurations.creating
+
+dependencies {
+  intellijPlatform {
+    intellijIdeaCommunity(libs.versions.intellij)
+    bundledPlugins("org.intellij.intelliLang", "org.jetbrains.plugins.terminal")
+    instrumentationTools()
+    testFramework(TestFrameworkType.Bundled)
+    pluginVerifier()
+  }
+
+  implementation(libs.bundles.junixsocket)
+  implementation(libs.lsp4j)
+  implementation(libs.lsp4jdebug)
   testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
-  testImplementation("junit:junit:4.11")
+  testImplementation(libs.junit)
+  testImplementation(libs.openTest4J)
+
+  psScriptAnalyzer(
+    group = "PSScriptAnalyzer",
+    name = "PSScriptAnalyzer",
+    version = psScriptAnalyzerVersion,
+    ext = "nupkg"
+  )
+
+  powerShellEditorServices(
+    group = "PowerShellEditorServices",
+    name = "PowerShellEditorServices",
+    version = psesVersion,
+    ext = "zip"
+  )
+}
+
+intellijPlatform {
+  pluginConfiguration {
+    name = "PowerShell"
+  }
+  pluginVerification {
+    ides {
+      recommended()
+    }
+    freeArgs.addAll(
+      "-mute", "ForbiddenPluginIdPrefix",
+      "-mute", "TemplateWordInPluginId"
+    )
+    failureLevel.add(VerifyPluginTask.FailureLevel.INTERNAL_API_USAGES)
+  }
 }
 
 configurations {
@@ -54,22 +114,24 @@ configurations {
 }
 
 tasks {
-  wrapper {
-    gradleVersion = "8.3"
-  }
-
   val resources = file("src/main/resources")
-  val genRoot = file("src/main/gen")
-  val genPackageDirectory = genRoot.resolve("com/intellij/plugin/powershell/lang")
+
   generateLexer {
+    val genLexerRoot = file("src/main/gen-lexer")
+    val genLexerPackageDirectory = genLexerRoot.resolve("com/intellij/plugin/powershell/lang")
+
+    purgeOldFiles = true
     sourceFile = resources.resolve("_PowerShellLexer.flex")
-    targetOutputDir = genPackageDirectory
+    targetOutputDir = genLexerPackageDirectory
     defaultCharacterEncoding = "UTF-8"
   }
 
   generateParser {
+    val genParserRoot = file("src/main/gen-parser")
+
+    purgeOldFiles = true
     sourceFile = resources.resolve("PowerShell.bnf")
-    targetRootOutputDir = genRoot
+    targetRootOutputDir = genParserRoot
     pathToParser = "com/intellij/plugin/powershell/lang/parser"
     pathToPsiRoot = "com/intellij/plugin/powershell/psi"
     defaultCharacterEncoding = "UTF-8"
@@ -78,25 +140,111 @@ tasks {
   withType<JavaCompile> {
     dependsOn(generateLexer, generateParser)
 
-    options.encoding = "UTF-8"
+    options.apply {
+      compilerArgs.add("-Werror")
+      encoding = "UTF-8"
+    }
     sourceCompatibility = "17"
     targetCompatibility = "17"
   }
   withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     dependsOn(generateLexer, generateParser)
 
-    kotlinOptions.jvmTarget = "17"
+    compilerOptions {
+      jvmTarget.set(JvmTarget.JVM_17)
+      allWarningsAsErrors = true
+    }
+  }
+
+  fun File.verifyHash(expectedHash: String) {
+    println("Calculating hash for $name...")
+    val data = readBytes()
+    val hash = MessageDigest.getInstance("SHA-256").let { sha256 ->
+      sha256.update(data)
+      sha256.digest().joinToString("") { "%02X".format(it) }
+    }
+    println("Expected hash for $name = $expectedHash")
+    println("Calculated hash for $name = $hash")
+    if (!hash.equals(expectedHash, ignoreCase = true)) {
+      error("$name hash check failed.\n" +
+        "Please try re-downloading the dependency, or update the expected hash in the gradle.properties file.")
+    }
+  }
+
+  val verifyPsScriptAnalyzer by registering {
+    dependsOn(psScriptAnalyzer)
+    inputs.property("hash", psScriptAnalyzerSha256Hash)
+    doFirst {
+      psScriptAnalyzer.singleFile.verifyHash(psScriptAnalyzerSha256Hash)
+    }
+  }
+
+  fun PrepareSandboxTask.unpackPsScriptAnalyzer(outDir: Provider<String>) {
+    dependsOn(psScriptAnalyzer, verifyPsScriptAnalyzer)
+
+    from(zipTree(psScriptAnalyzer.singleFile)) {
+      into(outDir.map { "$it/PSScriptAnalyzer" })
+
+      // NuGet stuff:
+      exclude("_manifest/**", "_rels/**", "package/**", "[Content_Types].xml", "*.nuspec")
+
+      // Compatibility profiles, see https://github.com/PowerShell/PSScriptAnalyzer/issues/1148
+      exclude("compatibility_profiles/**")
+    }
+  }
+
+  val verifyPowerShellEditorServices by registering {
+    dependsOn(powerShellEditorServices)
+    inputs.property("hash", psesSha256Hash)
+    doFirst {
+      powerShellEditorServices.singleFile.verifyHash(psesSha256Hash)
+    }
+  }
+
+  fun PrepareSandboxTask.unpackPowerShellEditorServices(outDir: Provider<String>) {
+    dependsOn(powerShellEditorServices, verifyPowerShellEditorServices)
+
+    from(zipTree(powerShellEditorServices.singleFile)) {
+      into(outDir.map { "$it/" })
+      // We only need this module and not anything else from the archive:
+      include("PowerShellEditorServices/**")
+    }
   }
 
   withType<PrepareSandboxTask> {
-    from("${project.rootDir}/language_host/current") {
-      into("${intellij.pluginName.get()}/lib/")
+    val outDir = intellijPlatform.pluginConfiguration.name.map { "$it/lib/LanguageHost/modules" }
+    unpackPsScriptAnalyzer(outDir)
+    unpackPowerShellEditorServices(outDir)
+  }
+
+  val maxUnpackedPluginBytes: String by project
+  val verifyDistributionSize by registering {
+    group = "verification"
+    dependsOn(buildPlugin)
+
+    doLast {
+      val artifact = buildPlugin.flatMap { it.archiveFile }.get().asFile
+      val unpackedSize = ZipFile(artifact).use { it.entries().asSequence().sumOf { e -> e.size } }
+      val unpackedSizeMiB = "%.3f".format(unpackedSize / 1024.0 / 1024.0)
+      if (unpackedSize > maxUnpackedPluginBytes.toLong()) {
+        error(
+          "The resulting artifact size is too large. Expected no more than $maxUnpackedPluginBytes, but got" +
+            " $unpackedSize bytes ($unpackedSizeMiB MiB).\nArtifact path: \"$artifact\"."
+        )
+      }
+
+      println("Verified unpacked distribution size: $unpackedSizeMiB MiB.")
     }
+  }
+
+  check {
+    dependsOn(verifyDistributionSize)
+    dependsOn(verifyPlugin)
   }
 
   runIde {
     jvmArgs("-Dide.plugins.snapshot.on.unload.fail=true", "-XX:+UnlockDiagnosticVMOptions")
-    autoReloadPlugins.set(true)
+    autoReload = true
   }
 
   patchPluginXml {
@@ -113,4 +261,13 @@ tasks {
     })
   }
 
+  val testPreview by intellijPlatformTesting.testIde.registering {
+    version = libs.versions.intellijPreview
+    useInstaller = false
+    task {
+      enabled = libs.versions.intellij.get() != libs.versions.intellijPreview.get()
+    }
+  }
+
+  check { dependsOn(testPreview.name) }
 }

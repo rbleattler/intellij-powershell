@@ -3,17 +3,13 @@ package com.intellij.plugin.powershell.lang.lsp.languagehost
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.util.SystemInfo
 import com.intellij.plugin.powershell.ide.PluginAppRoot
 import com.intellij.plugin.powershell.ide.run.checkExists
 import com.intellij.plugin.powershell.ide.run.getModuleVersion
 import com.intellij.plugin.powershell.ide.run.join
 import com.intellij.util.io.awaitExit
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.*
 import kotlinx.coroutines.future.asCompletableFuture
-import kotlinx.coroutines.runInterruptible
 import java.io.InputStream
 import java.util.concurrent.CompletableFuture
 
@@ -56,25 +52,36 @@ object PSLanguageHostUtils {
 
 private suspend fun readPowerShellVersion(exePath: String): PSVersionInfo {
   var process: Process? = null
-  val qInner = if (SystemInfo.isWindows) '\'' else '"'
-  val commandString = "(\$PSVersionTable.PSVersion, \$PSVersionTable.PSEdition) -join $qInner $qInner"
+  val commandString = "(\$PSVersionTable.PSVersion, \$PSVersionTable.PSEdition) -join ' '"
+  val commandLine = GeneralCommandLine(exePath, "–NoProfile", "-NonInteractive", "-Command", commandString)
   return coroutineScope {
     try {
-      process = GeneralCommandLine(arrayListOf(exePath, "-command", commandString)).createProcess()
+      process = commandLine.createProcess()
       fun readStream(stream: InputStream) = async {
         runInterruptible { stream.reader().use { it.readText() } }
       }
 
       val stdOutReader = readStream(process!!.inputStream)
-      readStream(process!!.errorStream)
+      val stdErrReader = readStream(process!!.errorStream)
       val exitCode = process!!.awaitExit()
       if (exitCode != 0) {
-        error("Process exit code $exitCode.")
+        val stdOut = stdOutReader.await()
+        val stdErr = stdErrReader.await()
+        val message = buildString {
+          append("Process exit code $exitCode.")
+          if (stdOut.isNotBlank()) {
+            append("\nStandard output:\n$stdOut")
+          }
+          if (stdErr.isNotBlank()) {
+            append("\nStandard error:\n$stdErr")
+          }
+        }
+        error(message)
       }
 
       PSVersionInfo.parse(stdOutReader.await().trim())
     } catch (e: Exception) {
-      PSLanguageHostUtils.LOG.warn("Command execution failed: ${arrayListOf(exePath, "--version")} ${e.message}", e)
+      PSLanguageHostUtils.LOG.warn("Command execution failed for ${commandLine.preparedCommandLine}", e)
       throw PowerShellControlFlowException(e.message, e.cause)
     } finally {
       process?.destroy()

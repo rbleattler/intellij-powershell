@@ -8,7 +8,6 @@
     <p><b>Plugin page:</b> <a href="https://plugins.jetbrains.com/plugin/10249">https://plugins.jetbrains.com/plugin/10249</a></p>
     <p>This plugin bundles the following third-party software:</p>
     <ul>
-      <li><a href="https://github.com/PowerShellOrg/Plaster">Plaster</a>,</li>
       <li><a href="https://github.com/PowerShell/PowerShellEditorServices">PowerShell Editor Services</a>,</li>
       <li><a href="https://github.com/PowerShell/PSScriptAnalyzer">PSScriptAnalyzer</a>.</li>
     </ul>
@@ -66,8 +65,10 @@
     <runConfigurationProducer
         implementation="com.intellij.plugin.powershell.ide.run.PowerShellConfigurationProducer" order="first"/>
 
-    <runConfigurationTemplateProvider implementation="com.intellij.plugin.powershell.ide.run.MyRunConfigurationTemplateProvider"/>
+    <xdebugger.breakpointType implementation="com.intellij.plugin.powershell.ide.debugger.PowerShellBreakpointType"/>
+
     <programRunner implementation="com.intellij.plugin.powershell.ide.run.PowerShellProgramRunner"/>
+    <programRunner implementation="com.intellij.plugin.powershell.ide.run.PowerShellProgramDebugRunner"/>
 
     <targetElementEvaluator language="PowerShell"
                             implementationClass="com.intellij.plugin.powershell.ide.search.PowerShellTargetElementEvaluator"/>
@@ -90,6 +91,9 @@
 
     <completion.contributor language="PowerShell"
                             implementationClass="com.intellij.plugin.powershell.ide.editor.completion.PowerShellCompletionContributor"/>
+
+    <completion.contributor language="PowerShell"
+                            implementationClass="com.intellij.plugin.powershell.ide.editor.completion.PowerShellDebuggerCompletionContributor"/>
 
     <lang.documentationProvider language="PowerShell"
                                 implementationClass="com.intellij.plugin.powershell.ide.editor.documentation.PowerShellDocumentationProvider"/>

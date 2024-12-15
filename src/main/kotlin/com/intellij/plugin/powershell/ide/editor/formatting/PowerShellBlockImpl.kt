@@ -19,7 +19,6 @@ import com.intellij.psi.formatter.WrappingUtil
 import com.intellij.psi.formatter.common.AbstractBlock
 import com.intellij.psi.impl.source.SourceTreeToPsiMap
 import com.intellij.psi.impl.source.tree.CompositeElement
-import java.util.*
 
 
 /**
@@ -95,7 +94,7 @@ open class PowerShellBlockImpl(node: ASTNode, wrap: Wrap?, alignment: Alignment?
 
   override fun buildChildren(): MutableList<Block> {
     if (isLeaf) {
-      return AbstractBlock.EMPTY
+      return EMPTY
     }
     val tlChildren = ArrayList<Block>()
     var childNode: ASTNode? = node.firstChildNode
@@ -356,6 +355,22 @@ class PowerShellSpacingProcessor(private val myCommonSettings: CommonCodeStyleSe
     val node2 = myChild2 as ASTNode
     val type2 = myChild2!!.elementType
 
+    if (node1.treeParent == node2.treeParent) {
+      // Check for a command argument: we should not rearrange anything inside an argument.
+      // Example of this:
+      // git log --pretty=format:'%Cred'
+      val parent = node1.treeParent
+      if (parent.elementType === COMMAND_ARGUMENT) return null
+
+      // Another example:
+      // & msbuild ".\solution.sln" -t:Restore,Rebuild
+      // in this case, the parent of both notes is a COMMAND_CALL_EXPRESSION, and we can figure out that we shouldn't
+      // touch it based on the absence of existing spaces between arguments.
+      if (parent.elementType === COMMAND_CALL_EXPRESSION && node1.textRange.endOffset == node2.textRange.startOffset) {
+        return null
+      }
+    }
+
     if (LCURLY === type1 || RCURLY === type2) {
       val braceNode = if (LCURLY === type1) node1 else node2
       val blockBody = findSiblingSkipping(braceNode, arrayOf(NLS, WHITE_SPACE), braceNode === node1)
@@ -505,7 +520,10 @@ class PowerShellSpacingProcessor(private val myCommonSettings: CommonCodeStyleSe
     if (isMultiplicativeOperator(type1) || isMultiplicativeOperator(type2)) {
       if (!isIdentifier(node1.treeParent) && !isIdentifier(node2.treeParent)) return simpleSpacing(myCommonSettings.SPACE_AROUND_MULTIPLICATIVE_OPERATORS)
     }
-    if (isUnaryOperator(node1) || isUnaryOperator(node2)) {
+    if (isWhitespaceRequiringUnaryOperator(node1)) {
+      return createSpacing(addSpace = true, ensureLineBreak = false)
+    }
+    if (isWhitespaceFlexibleUnaryOperator(node1) || isWhitespaceFlexibleUnaryOperator(node2)) {
       return simpleSpacing(myCommonSettings.SPACE_AROUND_UNARY_OPERATOR)
     }
     if (isReferenceDoubleColonOperator(type1) || isReferenceDoubleColonOperator(type2)) {

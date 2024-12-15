@@ -3,12 +3,10 @@
  */
 package com.intellij.plugin.powershell.lang.lsp.languagehost
 
-import com.intellij.collaboration.async.launchNow
 import com.intellij.ide.actions.ShowSettingsUtilImpl
 import com.intellij.notification.*
 import com.intellij.openapi.Disposable
-import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.diagnostic.runAndLogException
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
@@ -21,6 +19,7 @@ import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.plugin.powershell.PowerShellIcons
 import com.intellij.plugin.powershell.ide.MessagesBundle
 import com.intellij.plugin.powershell.ide.PluginProjectRoot
+import com.intellij.plugin.powershell.ide.runAndLogException
 import com.intellij.plugin.powershell.lang.lsp.client.PSLanguageClientImpl
 import com.intellij.plugin.powershell.lang.lsp.ide.DEFAULT_DID_CHANGE_CONFIGURATION_PARAMS
 import com.intellij.plugin.powershell.lang.lsp.ide.EditorEventManager
@@ -32,11 +31,8 @@ import com.intellij.plugin.powershell.lang.lsp.ide.listeners.SelectionListenerIm
 import com.intellij.plugin.powershell.lang.lsp.ide.settings.PowerShellConfigurable
 import com.intellij.plugin.powershell.lang.lsp.util.getTextEditor
 import com.intellij.plugin.powershell.lang.lsp.util.isRemotePath
-import com.intellij.util.io.await
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
+import kotlinx.coroutines.future.await
 import org.eclipse.lsp4j.*
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import org.eclipse.lsp4j.launch.LSPLauncher
@@ -51,13 +47,14 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
+private const val MAX_FAILED_STARTS = 2
+
 class LanguageServerEndpoint(
   private val coroutineScope: CoroutineScope,
   private val languageHostConnectionManager: LanguageHostConnectionManager,
   private val project: Project
 ) : Disposable {
 
-  private val LOG: Logger = Logger.getInstance(javaClass)
   private var client: PSLanguageClientImpl = PSLanguageClientImpl(project)
   private var languageServer: LanguageServer? = null
   private val textDocumentServiceQueue: TextDocumentServiceQueue
@@ -69,14 +66,11 @@ class LanguageServerEndpoint(
   private val rootPath = project.basePath
   private var crashCount: Int = 0
   private val myFailedStarts = AtomicInteger()
-  private val MAX_FAILED_STARTS = 2
 
   override fun toString(): String {
     val consoleString = if (isConsoleConnection()) " Console" else ""
     return "[PowerShell Editor Services host$consoleString connection, project: $rootPath]"
   }
-//  private val dumpFile = File(FileUtil.toCanonicalPath(PSLanguageHostUtils.getLanguageHostLogsDir() + "/protocol_messages_IJ.log"))
-//  private var fileWriter: PrintWriter? = null
 
   init {
     Disposer.register(PluginProjectRoot.getInstance(project), this)
@@ -89,7 +83,7 @@ class LanguageServerEndpoint(
   }
 
   fun start() {
-    coroutineScope.launchNow {
+    coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
       ensureStarted()
       val capabilities = getServerCapabilities()
       if (capabilities != null) {
@@ -100,17 +94,18 @@ class LanguageServerEndpoint(
 
   fun connectEditor(editor: Editor?) {
     if (editor == null) {
-      LOG.warn("Editor is null for $languageServer")
+      logger.warn("Editor is null for $languageServer")
       return
     }
     val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return
     val uri = VfsUtil.toUri(File(file.path))
+    @Suppress("DeferredResultUnused")
     connectedEditors.computeIfAbsent(uri) {
       coroutineScope.async {
         ensureStarted()
         val capabilities = getServerCapabilities()
         if (capabilities != null) {
-          LOG.runAndLogException {
+          logger.runAndLogException {
             val syncOptions: Either<TextDocumentSyncKind, TextDocumentSyncOptions> = capabilities.textDocumentSync
             val syncKind: TextDocumentSyncKind? = if (syncOptions.isRight) syncOptions.right.change else syncOptions.left
             val mouseListener = EditorMouseListenerImpl()
@@ -131,13 +126,13 @@ class LanguageServerEndpoint(
               documentListener.setManager(manager)
               selectionListener.setManager(manager)
               manager.registerListeners()
-              coroutineScope.launchNow { manager.documentOpened() }
-              LOG.debug("Created manager for $uri")
+              coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) { manager.documentOpened() }
+              logger.debug("Created manager for $uri")
               return@async manager
             }
           }
         } else {
-          LOG.warn("Capabilities are null for $languageServer")
+          logger.warn("Capabilities are null for $languageServer")
         }
 
         return@async null
@@ -171,19 +166,17 @@ class LanguageServerEndpoint(
       shutdown?.get(100, TimeUnit.MILLISECONDS)//otherwise lsp4j stream IOException
       languageServer?.exit()
     } catch (ignored: Exception) {
-      LOG.debug("PowerShell language host shutdown exception: $ignored")
+      logger.debug("PowerShell language host shutdown exception: $ignored")
     }
     languageServer = null
-//    fileWriter?.close()
-//    fileWriter = null
     destroyLanguageHostProcess()
-    LOG.info("Connection to PowerShell language host closed for $rootPath.")
+    logger.info("Connection to PowerShell language host closed for $rootPath.")
   }
 
   fun disconnectEditor(uri: URI) {
     val deferred = connectedEditors.remove(uri)
     if (deferred != null) {
-      coroutineScope.launchNow {
+      coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
         val manager = deferred.await()
         manager?.removeListeners()
         manager?.documentClosed()
@@ -214,9 +207,8 @@ class LanguageServerEndpoint(
 
     return coroutineScope.async job@{
       try {
-        val (inStream, outStream) = languageHostConnectionManager.establishConnection()
-        if (inStream == null || outStream == null) {
-          LOG.warn("Connection creation to PowerShell language host failed for $rootPath")
+        val (inStream, outStream) = languageHostConnectionManager.establishConnection() ?: run {
+          logger.warn("Connection creation to PowerShell language host failed for $rootPath")
           onStartFailure()
           return@job null
         }
@@ -226,7 +218,7 @@ class LanguageServerEndpoint(
 
         val server = languageServer
         if (server == null) {
-          LOG.warn("Language server is null for $launcher")
+          logger.warn("Language server is null for $launcher")
           onStartFailure()
           return@job null
         }
@@ -235,26 +227,26 @@ class LanguageServerEndpoint(
         launcher.startListening() // NOTE: no need to await here; the future only terminates together with the server
         languageHostConnectionManager.connectServer(this@LanguageServerEndpoint)
         val result = async { initialize(server) }
-        LOG.debug("Sent initialize request to server")
+        logger.debug("Sent initialize request to server")
 
         if (isConsoleConnection()) addRemoteFilesChangeListener()//register vfs listener for saving remote files
         return@job result.await()
       } catch (e: Exception) {
         when (e) {
           is PowerShellExtensionError -> {
-            LOG.warn("PowerShell extension error: ${e.message}")
+            logger.warn("PowerShell extension error: ${e.message}")
             showPowerShellNotConfiguredNotification()
           }
           is PowerShellExtensionNotFound -> {
-            LOG.warn("PowerShell extension not found", e)
+            logger.warn("PowerShell extension not found", e)
             showPowerShellNotConfiguredNotification()
           }
           is PowerShellNotInstalled -> {
-            LOG.warn("PowerShell is not installed", e)
+            logger.warn("PowerShell is not installed", e)
             showPowerShellNotInstalledNotification()
           }
           else -> {
-            LOG.warn("Can not start language server: ", e)
+            logger.warn("Can not start language server: ", e)
           }
         }
 
@@ -276,7 +268,7 @@ class LanguageServerEndpoint(
                 .filter { isRemotePath(it) }
                 .map { Paths.get(it).toUri().toASCIIString() }
                 .forEach { uri ->
-                  coroutineScope.launchNow {
+                  coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
                     textDocumentServiceQueue.didSave(DidSaveTextDocumentParams(TextDocumentIdentifier(uri), null))
                   }
                 }
@@ -322,17 +314,16 @@ class LanguageServerEndpoint(
     workspaceClientCapabilities.didChangeConfiguration = DidChangeConfigurationCapabilities()
     workspaceClientCapabilities.didChangeWatchedFiles = DidChangeWatchedFilesCapabilities()
     workspaceClientCapabilities.executeCommand = ExecuteCommandCapabilities()
-    workspaceClientCapabilities.workspaceEdit = WorkspaceEditCapabilities(true)
+    workspaceClientCapabilities.workspaceEdit = WorkspaceEditCapabilities().apply {
+      documentChanges = true
+    }
     workspaceClientCapabilities.symbol = SymbolCapabilities()
     val textDocumentClientCapabilities = TextDocumentClientCapabilities()
     textDocumentClientCapabilities.codeAction = CodeActionCapabilities()
-    //textDocumentClientCapabilities.setCodeLens(new CodeLensCapabilities)
     textDocumentClientCapabilities.completion = CompletionCapabilities(CompletionItemCapabilities(false))
     textDocumentClientCapabilities.definition = DefinitionCapabilities()
     textDocumentClientCapabilities.documentHighlight = DocumentHighlightCapabilities()
     textDocumentClientCapabilities.synchronization = SynchronizationCapabilities(false, false, true)
-    //textDocumentClientCapabilities.setDocumentLink(new DocumentLinkCapabilities)
-    //textDocumentClientCapabilities.setDocumentSymbol(new DocumentSymbolCapabilities)
     textDocumentClientCapabilities.formatting = FormattingCapabilities()
     textDocumentClientCapabilities.hover = HoverCapabilities()
     textDocumentClientCapabilities.onTypeFormatting = OnTypeFormattingCapabilities()
@@ -342,11 +333,11 @@ class LanguageServerEndpoint(
     textDocumentClientCapabilities.signatureHelp = SignatureHelpCapabilities()
     textDocumentClientCapabilities.synchronization = SynchronizationCapabilities(true, true, true)
     val initParams = InitializeParams()
-    initParams.rootUri = rootPath
+    initParams.workspaceFolders = listOf(WorkspaceFolder(rootPath, "root"))
     initParams.capabilities = ClientCapabilities(workspaceClientCapabilities, textDocumentClientCapabilities, null)
     initParams.initializationOptions = null
     val result = server.initialize(initParams).await()
-    LOG.info("Got server initialize result for $rootPath")
+    logger.info("Got server initialize result for $rootPath")
     return result
   }
 
@@ -359,7 +350,7 @@ class LanguageServerEndpoint(
     get() = synchronized(serverInitializationLock) { serverInitialization } != null
 
   fun crashed(e: Throwable) {
-    LOG.warn("Crashed: $e")
+    logger.warn("Crashed: $e")
     crashCount += 1
     if (crashCount < 5) {
       val editors = connectedEditors.toMap().keys
@@ -404,3 +395,5 @@ class LanguageServerEndpoint(
     }
   }
 }
+
+private val logger = logger<LanguageServerEndpoint>()

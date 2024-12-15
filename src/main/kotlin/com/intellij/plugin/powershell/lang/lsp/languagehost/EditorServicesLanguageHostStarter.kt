@@ -3,7 +3,7 @@ package com.intellij.plugin.powershell.lang.lsp.languagehost
 import com.google.common.io.Files
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.configurations.PtyCommandLine
 import com.intellij.execution.process.*
 import com.intellij.notification.BrowseNotificationAction
 import com.intellij.notification.Notification
@@ -13,7 +13,6 @@ import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.application.ApplicationNamesInfo
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.rd.util.withSyncIOBackgroundContext
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.util.SystemInfo
 import com.intellij.openapi.util.io.FileUtil
@@ -27,13 +26,16 @@ import com.intellij.plugin.powershell.lang.lsp.languagehost.PSLanguageHostUtils.
 import com.intellij.plugin.powershell.lang.lsp.languagehost.PSLanguageHostUtils.getEditorServicesModuleVersion
 import com.intellij.plugin.powershell.lang.lsp.languagehost.PSLanguageHostUtils.getEditorServicesStartupScript
 import com.intellij.plugin.powershell.lang.lsp.languagehost.PSLanguageHostUtils.getPSExtensionModulesDir
+import com.intellij.util.application
 import com.intellij.util.execution.ParametersListUtil
 import com.intellij.util.io.BaseOutputReader
-import com.intellij.util.io.await
 import com.sun.jna.Pointer
 import com.sun.jna.platform.win32.Kernel32
 import com.sun.jna.platform.win32.WinNT
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.future.await
+import kotlinx.coroutines.withContext
 import org.newsclub.net.unix.AFUNIXSocket
 import org.newsclub.net.unix.AFUNIXSocketAddress
 import java.io.*
@@ -71,34 +73,18 @@ open class EditorServicesLanguageHostStarter(protected val myProject: Project) :
         "${ApplicationInfo.getInstance().majorVersion}.${ApplicationInfo.getInstance().minorVersion}"
 
     private data class HostDetails(val name: String, val profileId: String, val version: String)
-    private open class SessionInfo private constructor(val powerShellVersion: String?, val status: String?) {
 
-      class Pipes(
-        val languageServiceReadPipeName: String,
-        val languageServiceWritePipeName: String,
-        val debugServiceReadPipeName: String,
-        val debugServiceWritePipeName: String,
-        powerShellVersion: String?,
-        status: String?
-      ) : SessionInfo(powerShellVersion, status) {
-        override fun toString(): String {
-          return "{languageServiceReadPipeName:$languageServiceReadPipeName,languageServiceWritePipeName:$languageServiceWritePipeName," +
-              "debugServiceReadPipeName:$debugServiceReadPipeName,debugServiceWritePipeName:$debugServiceWritePipeName," +
-              "powerShellVersion:$powerShellVersion,status:$status}"
-        }
-      }
-
-      class Tcp(
-        val languageServicePort: Int,
-        val debugServicePort: Int,
-        powerShellVersion: String?,
-        status: String?
-      ) : SessionInfo(powerShellVersion, status) {
-        override fun toString(): String {
-          return "{languageServicePort:$languageServicePort,debugServicePort:$debugServicePort,powerShellVersion:$powerShellVersion,status:$status}"
-        }
-      }
+    sealed class ConnectionInfo {
+      data class Pipes(val readPipeName: String, val writePipeName: String) : ConnectionInfo()
+      data class Tcp(val port: Int) : ConnectionInfo()
     }
+
+    data class SessionInfo(
+      val powerShellVersion: String?,
+      val status: String?,
+      val languageService: ConnectionInfo?,
+      val debuggerService: ConnectionInfo?
+    )
 
     /**
      * @throws PowerShellExtensionNotFound
@@ -130,54 +116,65 @@ open class EditorServicesLanguageHostStarter(protected val myProject: Project) :
     }
   }
 
+  private suspend fun establishConnection(connectionInfo: ConnectionInfo): Pair<InputStream, OutputStream>? =
+    when (connectionInfo) {
+      is ConnectionInfo.Pipes -> {
+        val readPipeName = connectionInfo.readPipeName
+        val writePipeName = connectionInfo.writePipeName
+        withContext(Dispatchers.IO) {
+          if (SystemInfo.isWindows) {
+            val readPipe = RandomAccessFile(readPipeName, "rwd")
+            val writePipe = RandomAccessFile(writePipeName, "r")
+            val serverReadChannel = readPipe.channel
+            val serverWriteChannel = writePipe.channel
+            val inSf = Channels.newInputStream(serverWriteChannel)
+            val outSf = BufferedOutputStream(Channels.newOutputStream(serverReadChannel))
+            Pair(inSf, outSf)
+          } else {
+            val readSock = AFUNIXSocket.newInstance()
+            val writeSock = AFUNIXSocket.newInstance()
+            readSock.connect(AFUNIXSocketAddress.of(File(readPipeName)))
+            writeSock.connect(AFUNIXSocketAddress.of(File(writePipeName)))
+            Pair(writeSock.inputStream, readSock.outputStream)
+          }
+        }
+      }
+      is ConnectionInfo.Tcp -> {
+        withContext(Dispatchers.IO) block@{
+          val port = connectionInfo.port
+          try {
+            socket = Socket("127.0.0.1", port)
+          } catch (e: Exception) {
+            logger.error("Unable to open connection to language host: $e")
+          }
+          if (socket == null) {
+            logger.error("Unable to create socket: " + toString())
+          }
+          if (socket?.isConnected == true) {
+            logger.info("Connection to language host established: ${socket?.localPort} -> ${socket?.port}")
+            val inputStream = socket?.getInputStream()
+            val outputStream = socket?.getOutputStream()
+            if (inputStream != null && outputStream != null) Pair(inputStream, outputStream)
+          }
+
+          null
+        }
+      }
+    }
+
   /**
    * @throws PowerShellExtensionError
    * @throws PowerShellExtensionNotFound
    * @throws PowerShellNotInstalled
    */
-  override suspend fun establishConnection(): Pair<InputStream?, OutputStream?> {
-    val sessionInfo = startServerSession() ?: return Pair(null, null)
-    if (sessionInfo is SessionInfo.Pipes) {
-      val readPipeName = sessionInfo.languageServiceReadPipeName
-      val writePipeName = sessionInfo.languageServiceWritePipeName
-      return withSyncIOBackgroundContext {
-        if (SystemInfo.isWindows) {
-          val readPipe = RandomAccessFile(readPipeName, "rwd")
-          val writePipe = RandomAccessFile(writePipeName, "r")
-          val serverReadChannel = readPipe.channel
-          val serverWriteChannel = writePipe.channel
-          val inSf = Channels.newInputStream(serverWriteChannel)
-          val outSf = BufferedOutputStream(Channels.newOutputStream(serverReadChannel))
-          Pair(inSf, outSf)
-        } else {
-          val readSock = AFUNIXSocket.newInstance()
-          val writeSock = AFUNIXSocket.newInstance()
-          readSock.connect(AFUNIXSocketAddress(File(readPipeName)))
-          writeSock.connect(AFUNIXSocketAddress(File(writePipeName)))
-          Pair(writeSock.inputStream, readSock.outputStream)
-        }
-      }
-    } else {
-      return withSyncIOBackgroundContext block@{
-        val port = (sessionInfo as? SessionInfo.Tcp)?.languageServicePort ?: return@block Pair(null, null)
-        try {
-          socket = Socket("127.0.0.1", port)
-        } catch (e: Exception) {
-          logger.error("Unable to open connection to language host: $e")
-        }
-        if (socket == null) {
-          logger.error("Unable to create socket: " + toString())
-        }
-        if (socket?.isConnected == true) {
-          logger.info("Connection to language host established: ${socket?.localPort} -> ${socket?.port}")
-          val inputStream = socket?.getInputStream()
-          val outputStream = socket?.getOutputStream()
-          if (inputStream != null && outputStream != null) return@block Pair(inputStream, outputStream)
-        }
+  override suspend fun establishConnection(): Pair<InputStream, OutputStream>? {
+    val sessionInfo = startServerSession() ?: return null
+    return sessionInfo.languageService?.let { establishConnection(it) }
+  }
 
-        Pair(null, null)
-      }
-    }
+  override suspend fun  establishDebuggerConnection(): Pair<InputStream, OutputStream>? {
+    val sessionInfo = startServerSession(isDebugServiceOnly = true) ?: return null
+    return sessionInfo.debuggerService?.let { establishConnection(it) }
   }
 
   private fun getSessionCount(): Int {
@@ -193,13 +190,14 @@ open class EditorServicesLanguageHostStarter(protected val myProject: Project) :
     return file
   }
 
-  override fun createProcess(project: Project, command: List<String>, environment: Map<String, String>?): Process {
-    return GeneralCommandLine(command)
+  override fun createProcess( command: List<String>, environment: Map<String, String>?): Process {
+    return PtyCommandLine(command)
+      .withConsoleMode(false)
       .withEnvironment(environment)
       .createProcess()
   }
 
-  private suspend fun buildCommandLine(): List<String> {
+  private suspend fun buildCommandLine(isDebugServiceOnly: Boolean = false): List<String> {
     val psExtensionPath = getPowerShellEditorServicesHome()
     val startupScript = getStartupScriptPath(psExtensionPath)
     if (StringUtil.isEmpty(startupScript)) {
@@ -223,12 +221,18 @@ open class EditorServicesLanguageHostStarter(protected val myProject: Project) :
       psesVersionString = "-EditorServicesVersion '$psesVersionString'"
     }
     val bundledModulesPath = getPSExtensionModulesDir(psExtensionPath)
-    val useReplSwitch = if (useConsoleRepl()) "-EnableConsoleRepl" else ""
-    val logLevel = if (useConsoleRepl()) "Normal" else "Diagnostic"
+
+    val shouldUseRepl = !application.isUnitTestMode && (useConsoleRepl() || isDebugServiceOnly)
+    val useReplSwitch = if (shouldUseRepl) "-EnableConsoleRepl" else ""
+    // NOTE: -EnableConsoleRepl breaks tests on Unix, so we disabled it for now
+
+    val logLevel = if (useConsoleRepl() || isDebugServiceOnly) "Normal" else "Diagnostic"
+    val debugServiceOnlySwitch = if(isDebugServiceOnly) " -DebugServiceOnly" else ""
     val args = "$psesVersionString -HostName '${myHostDetails.name}' -HostProfileId '${myHostDetails.profileId}' " +
         "-HostVersion '${myHostDetails.version}' -AdditionalModules @() " +
-        "-BundledModulesPath '$bundledModulesPath' $useReplSwitch " +
+        "-BundledModulesPath '$bundledModulesPath' $useReplSwitch $debugServiceOnlySwitch " +
         "-LogLevel '$logLevel' -LogPath '$logPath' -SessionDetailsPath '$sessionDetailsPath' -FeatureFlags @() $splitInOutPipesSwitch"
+
     val preamble =
       if (SystemInfo.isWindows) {
         when (psVersion.edition) {
@@ -244,7 +248,7 @@ open class EditorServicesLanguageHostStarter(protected val myProject: Project) :
       } else ""
     val scriptText = "$preamble${escapePath(startupScript)} $args"
 
-    val scriptFile = withSyncIOBackgroundContext {
+    val scriptFile = withContext(Dispatchers.IO) {
       File.createTempFile("start-pses-host", ".ps1").apply {
         deleteOnExit()
         try {
@@ -261,7 +265,7 @@ open class EditorServicesLanguageHostStarter(protected val myProject: Project) :
     command.add("-NoProfile")
     command.add("-NonInteractive")
     command.addAll(listOf("-ExecutionPolicy", "RemoteSigned")) // to run under default Restricted policy on PowerShell 5
-    command.add(scriptFile.canonicalPath)
+    command.addAll(listOf("-File", scriptFile.canonicalPath))
     logger.info("Language server startup command: '$command',\n launch command: $scriptText")
     return command
   }
@@ -271,11 +275,11 @@ open class EditorServicesLanguageHostStarter(protected val myProject: Project) :
    * @throws PowerShellExtensionNotFound
    * @throws PowerShellNotInstalled
    */
-  private suspend fun startServerSession(): SessionInfo? {
+  suspend fun startServerSession(isDebugServiceOnly: Boolean = false): SessionInfo? {
     cachedPowerShellExtensionDir = null
     cachedEditorServicesModuleVersion = null
-    val commandLine = buildCommandLine()
-    val process = createProcess(myProject, commandLine, mapOf(INTELLIJ_POWERSHELL_PARENT_PID to ProcessHandle.current().pid().toString()))
+    val commandLine = buildCommandLine(isDebugServiceOnly)
+    val process = createProcess(commandLine, mapOf(INTELLIJ_POWERSHELL_PARENT_PID to ProcessHandle.current().pid().toString()))
     val pid: Long = getProcessID(process)
     processOutput(
       process,
@@ -306,7 +310,7 @@ open class EditorServicesLanguageHostStarter(protected val myProject: Project) :
   }
 
   private fun processOutput(process: Process, pid: Long, commandLine: String, editorServicesVersion: String) {
-    if (useConsoleRepl()) return
+    if (useConsoleRepl() && !application.isUnitTestMode) return
 
     fun showInstallNotification() {
       val content = "Required $editorServicesVersion 'PowerShellEditorServices' module is not found. Please install PowerShell VS Code extension"
@@ -347,37 +351,40 @@ open class EditorServicesLanguageHostStarter(protected val myProject: Project) :
     handler.startNotify()
   }
 
-  private fun readTcpInfo(jsonResult: JsonObject): SessionInfo? {
-    val langServicePort = jsonResult.get("languageServicePort")?.asInt
-    val debugServicePort = jsonResult.get("debugServicePort")?.asInt
-    val powerShellVersion = jsonResult.get("powerShellVersion")?.asString
-    val status = jsonResult.get("status")?.asString
-    if (langServicePort == null || debugServicePort == null) {
-      logger.warn("languageServicePort or debugServicePort are null")
+  private fun readTcpConnectionInfo(prefix: String, jsonResult: JsonObject): ConnectionInfo.Tcp? {
+    val port = jsonResult.get("${prefix}Port")?.asInt
+    if (port == null) {
       return null
     }
-    return SessionInfo.Tcp(langServicePort, debugServicePort, powerShellVersion, status)
+    return ConnectionInfo.Tcp(port)
   }
 
-  private fun readPipesInfo(jsonResult: JsonObject): SessionInfo? {
-    val langServiceReadPipeName = jsonResult.get("languageServiceReadPipeName")?.asString
-    val langServiceWritePipeName = jsonResult.get("languageServiceWritePipeName")?.asString
-    val debugServiceReadPipeName = jsonResult.get("debugServiceReadPipeName")?.asString
-    val debugServiceWritePipeName = jsonResult.get("debugServiceWritePipeName")?.asString
-    val powerShellVersion = jsonResult.get("powerShellVersion")?.asString
-    val status = jsonResult.get("status")?.asString
-    if (langServiceReadPipeName == null || langServiceWritePipeName == null || debugServiceReadPipeName == null || debugServiceWritePipeName == null) {
-      logger.warn("languageServiceReadPipeName or debugServiceReadPipeName are null")
+  private fun readPipeConnectionInfo(prefix: String, jsonResult: JsonObject): ConnectionInfo.Pipes? {
+    val readPipeAttr = "${prefix}ReadPipeName"
+    val writePipeAttr = "${prefix}WritePipeName"
+
+    val readPipeName = jsonResult.get(readPipeAttr)?.asString
+    val writePipeName = jsonResult.get(writePipeAttr)?.asString
+
+    if (readPipeName == null && writePipeName == null) {
       return null
     }
-    return SessionInfo.Pipes(langServiceReadPipeName, langServiceWritePipeName, debugServiceReadPipeName, debugServiceWritePipeName, powerShellVersion, status)
+
+    return ConnectionInfo.Pipes(
+      readPipeName ?: error("$readPipeAttr attribute is missing in a session file."),
+      writePipeName ?: error("$writePipeAttr attribute is missing in a session file.")
+    )
   }
 
   private fun readSessionFile(sessionFile: File): SessionInfo? {
     return try {
       val line = Files.asCharSource(sessionFile, Charset.forName("utf8")).readFirstLine()
       val jsonResult = JsonParser.parseString(line).asJsonObject
-      readPipesInfo(jsonResult) ?: readTcpInfo(jsonResult)
+      val powerShellVersion = jsonResult.get("powerShellVersion")?.asString
+      val status = jsonResult.get("status")?.asString
+      val langConnection = readPipeConnectionInfo("languageService", jsonResult) ?: readTcpConnectionInfo("languageService", jsonResult)
+      val debugConnection = readPipeConnectionInfo("debugService", jsonResult) ?: readTcpConnectionInfo("debugService", jsonResult)
+      return SessionInfo(powerShellVersion, status, langConnection, debugConnection)
     } catch (e: Exception) {
       logger.warn("Error reading/parsing session details file $sessionFile: $e")
       null

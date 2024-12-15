@@ -13,36 +13,38 @@ on:
 
 jobs:
   publish:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Read version from Git ref
         id: version
         shell: pwsh
         run: echo "version=$(if ($env:GITHUB_REF.StartsWith('refs/tags/v')) { $env:GITHUB_REF -replace '^refs/tags/v', '' } else { 'next' })" >> $env:GITHUB_OUTPUT
 
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: "Check out the sources"
+        uses: actions/checkout@v4
+
+      - name: Cache downloaded JDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/gradle-jvm
+            ~/AppData/Local/gradle-jvm
+          key: ${{ runner.os }}-${{ hashFiles('gradlew*') }}
 
       - name: Read the changelog
-        uses: ForNeVeR/ChangelogAutomation.action@v1
+        uses: ForNeVeR/ChangelogAutomation.action@v2
         with:
           input: ./CHANGELOG.md
           output: ./changelog-section.md
 
       - name: Upload the changelog
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: changelog-section.md
           path: ./changelog-section.md
 
-      - name: Set up Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'corretto'
-          java-version: '17'
-
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Build the plugin
         run: ./gradlew buildPlugin
@@ -52,14 +54,14 @@ jobs:
         run: src/scripts/Unpack-Distribution.ps1
 
       - name: Upload the artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: PowerShell-${{ steps.version.outputs.version }}
           path: build/distributions/unpacked
 
       - name: Create a release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: intellij-powershell v${{ steps.version.outputs.version }}
           body_path: ./changelog-section.md

@@ -1,4 +1,6 @@
-/src/main/gen
+/.intellijPlatform/
+/src/main/gen-parser
+/src/main/gen-lexer
 
 # Created by .ignore support plugin (hsz.mobi)
 ### JetBrains template
