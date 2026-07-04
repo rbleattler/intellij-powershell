@@ -85,17 +85,11 @@ dependencies {
   testRuntimeOnly(libs.junit.vintage.engine)
 
   psScriptAnalyzer(
-    group = "PSScriptAnalyzer",
-    name = "PSScriptAnalyzer",
-    version = psScriptAnalyzerVersion,
-    ext = "nupkg"
+    "PSScriptAnalyzer:PSScriptAnalyzer:$psScriptAnalyzerVersion@nupkg"
   )
 
   powerShellEditorServices(
-    group = "PowerShellEditorServices",
-    name = "PowerShellEditorServices",
-    version = psesVersion,
-    ext = "zip"
+    "PowerShellEditorServices:PowerShellEditorServices:$psesVersion@zip"
   )
 }
 
@@ -121,10 +115,11 @@ intellijPlatform {
   }
 }
 
+@Suppress("UnstableApiUsage")
 configurations {
   runtimeClasspath {
-    // NOTE: Newer versions of these libraries are provided by IntelliJ, so let's exclude them from the dependency set
-    // of org.eclipse.lsp4j:
+    // NOTE: IntelliJ provides newer versions of these libraries, so let's exclude them from the dependency set of
+    // org.eclipse.lsp4j:
     exclude("com.google.code.gson", "gson")
     exclude("com.google.guava", "guava")
   }
@@ -233,6 +228,7 @@ tasks {
 
   val maxUnpackedPluginBytes: String by project
   val verifyDistributionSize by registering {
+    description = "Verify that the resulting plugin artifact size is not unexpectedly large."
     group = "verification"
 
     val pluginArtifact = buildPlugin.flatMap { it.archiveFile }
