@@ -27,7 +27,7 @@ Install the plugin [from IDE](https://www.jetbrains.com/help/idea/managing-plugi
 - [Run Configuration](https://www.jetbrains.com/help/idea/run-debug-configuration.html).
 - Script debugging.
 - Integrated PowerShell Console (Tools | PowerShell Console... action).
-- Remote files editing with 'psedit' command in PowerShell console (see [psedit support][docs.remote-file-editing]).
+- Remote files editing with 'psedit' command in the integrated PowerShell console (see [psedit support][docs.remote-file-editing]).
 
 Settings
 --------
