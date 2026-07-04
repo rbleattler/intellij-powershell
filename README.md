@@ -27,8 +27,7 @@ Install the plugin [from IDE](https://www.jetbrains.com/help/idea/managing-plugi
 - [Run Configuration](https://www.jetbrains.com/help/idea/run-debug-configuration.html).
 - Script debugging.
 - Integrated PowerShell Console (Tools | PowerShell Console... action).
-- Remote files editing with 'psedit' command in PowerShell console (see [psedit support](https://bitbucket.org/adernov/powershell/issues/18/psedit-support#comment-46351640)):
-  ![Remote file editing][image.remote-file-editing]
+- Remote files editing with 'psedit' command in PowerShell console (see [psedit support][docs.remote-file-editing]).
 
 Settings
 --------
@@ -72,7 +71,7 @@ limitations under the License.
 [docs.contributing]: ./CONTRIBUTING.md
 [docs.license]: ./LICENSE
 [docs.maintainership]: ./MAINTAINERSHIP.md
-[image.remote-file-editing]: doc/remote-file-editing.gif
+[docs.remote-file-editing]: ./doc/remote-file-editing.md
 [plugin-repository]: https://plugins.jetbrains.com/plugin/10249-powershell
 [powershell-editor-services]: https://github.com/PowerShell/PowerShellEditorServices
 [ps-script-analyzer]: https://github.com/PowerShell/PSScriptAnalyzer
