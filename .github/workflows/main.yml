@@ -11,12 +11,19 @@ on:
 
 jobs:
   main:
-    runs-on: ${{ matrix.image }}
-    timeout-minutes: 60
     strategy:
       matrix:
-        image: [macos-15, ubuntu-24.04, windows-2025]
+        environment:
+          - image: macos-15
+            name: macos
+          - image: ubuntu-24.04
+            name: linux
+          - image: windows-2025
+            name: windows
       fail-fast: false
+    runs-on: ${{ matrix.environment.image }}
+    name: main.${{ matrix.environment.name }}
+    timeout-minutes: 60
     steps:
       - if: runner.os == 'Linux'
         name: Free disk space
