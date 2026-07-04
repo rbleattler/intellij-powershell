@@ -1,4 +1,5 @@
-<!-- SPDX-FileCopyrightText: Copyright 2018 Andrey Dernov -->
+<!-- SPDX-FileCopyrightText: 2018 Andrey Dernov -->
+<!-- SPDX-FileCopyrightText: 2026 intellij-powershell contributors <https://github.com/intellij-powershell/intellij-powershell> -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
 # Remote file editing with `psedit`
