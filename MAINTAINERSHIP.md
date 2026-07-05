@@ -28,3 +28,15 @@ To update the token used for publishing the plugin, follow these steps.
 
 [github.secrets]: https://github.com/intellij-powershell/intellij-powershell/settings/secrets/actions
 [marketplace.tokens]: https://plugins.jetbrains.com/author/me/tokens
+
+Rotate Dependency Update Token
+------------------------------
+
+This project uses a dedicated GitHub application to update IntelliJ-based dependencies, as documented in [intellij-updater](https://github.com/ForNeVeR/intellij-updater).
+
+To update the token:
+
+1. Go to [the application settings](https://github.com/settings/apps/intellij-updater).
+2. Generate a new private key.
+3. Copy the **App ID** to the `IJ_UPDATER_APP_ID` variable in [GitHub Actions secrets][github.secrets].
+4. Copy the new private key to the `IJ_UPDATER_PRIVATE_KEY` variable in [GitHub Actions secrets][github.secrets].

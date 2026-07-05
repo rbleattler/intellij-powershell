@@ -27,9 +27,17 @@ jobs:
         name: "Update the dependency versions"
 
       - if: steps.update.outputs.has-changes == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        uses: actions/create-github-app-token@v3
+        id: generate-token
+        with:
+          app-id: ${{ secrets.IJ_UPDATER_APP_ID }}
+          private-key: ${{ secrets.IJ_UPDATER_PRIVATE_KEY }}
+
+      - if: steps.update.outputs.has-changes == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         name: "Create a PR"
         uses: peter-evans/create-pull-request@v7
         with:
+          token: ${{ steps.generate-token.outputs.token }}
           branch: ${{ steps.update.outputs.branch-name }}
           author: "intellij-powershell automation <friedrich@fornever.me>"
           commit-message: ${{ steps.update.outputs.commit-message }}
@@ -47,6 +55,12 @@ jobs:
       - name: "Check out the sources"
         uses: actions/checkout@v6
 
+      - uses: actions/create-github-app-token@v3
+        id: generate-token
+        with:
+          app-id: ${{ secrets.IJ_UPDATER_APP_ID }}
+          private-key: ${{ secrets.IJ_UPDATER_PRIVATE_KEY }}
+
       - id: update
         name: "Update the dependency versions"
         shell: pwsh
@@ -58,6 +72,7 @@ jobs:
         name: "Create a PR"
         uses: peter-evans/create-pull-request@v7
         with:
+          token: ${{ steps.generate-token.outputs.token }}
           branch: ${{ steps.update.outputs.branch-name }}
           author: "intellij-powershell automation <friedrich@fornever.me>"
           commit-message: ${{ steps.update.outputs.commit-message }}
