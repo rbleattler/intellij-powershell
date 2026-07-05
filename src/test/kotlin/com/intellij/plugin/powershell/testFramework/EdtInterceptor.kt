@@ -8,11 +8,13 @@ import java.lang.reflect.Method
 class EdtInterceptor: InvocationInterceptor {
   override fun interceptTestMethod(
     invocation: InvocationInterceptor.Invocation<Void?>,
-    invocationContext: ReflectiveInvocationContext<Method?>,
+    invocationContext: ReflectiveInvocationContext<Method>,
     extensionContext: ExtensionContext
   ) {
-    if(invocationContext.executable?.getAnnotation(RunInEdt::class.java) != null || invocationContext.targetClass?.getAnnotation(RunInEdt::class.java) != null)
+    if(invocationContext.executable.getAnnotation(RunInEdt::class.java) != null
+      || invocationContext.targetClass.getAnnotation(RunInEdt::class.java) != null) {
       runInEdt { invocation.proceed() }
+    }
     else invocation.proceed()
   }
 }
