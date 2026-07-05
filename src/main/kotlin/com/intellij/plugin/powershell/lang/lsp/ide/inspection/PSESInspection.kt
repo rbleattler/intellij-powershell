@@ -29,6 +29,13 @@ class PSESInspection : LocalInspectionTool() {
       val range = d.range
       try {
         val message = d.message
+        val messageText = when {
+          message.left != null -> message.left
+          else -> {
+            LOG.error("Unexpected diagnostic message format: $message")
+            message.right.value
+          }
+        }
         val highlightType: ProblemHighlightType = getHighlightType(d.severity)
         var rangeStart = lspPosToOffset(editor, range.start)
         var rangeEnd = lspPosToOffset(editor, range.end)
@@ -40,7 +47,7 @@ class PSESInspection : LocalInspectionTool() {
         } else {
           file
         }
-        val problemDescriptor = manager.createProblemDescriptor(element, message, isOnTheFly, null, highlightType)
+        val problemDescriptor = manager.createProblemDescriptor(element, messageText, isOnTheFly, null, highlightType)
         result.add(problemDescriptor)
       } catch (e: StringIndexOutOfBoundsException) {
         LOG.warn("String out of bounds for server range ${rToString(range)}: ${e.message}")
