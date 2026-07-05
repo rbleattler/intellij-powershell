@@ -1,11 +1,15 @@
 package com.intellij.plugin.powershell.testFramework
 
+import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
+import com.intellij.plugin.powershell.ide.PluginProjectRoot
 import com.intellij.plugin.powershell.lang.lsp.LanguageServer
 import com.intellij.testFramework.fixtures.CodeInsightTestFixture
 import com.intellij.testFramework.fixtures.IdeaTestFixtureFactory
 import com.intellij.testFramework.fixtures.impl.TempDirTestFixtureImpl
 import com.intellij.testFramework.junit5.fixture.tempPathFixture
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterEach
@@ -39,6 +43,10 @@ open class PowerShellCodeInsightTestBase {
   @AfterEach
   fun tearDownEdt() {
     runInEdt {
+      // codeInsightTestFixture.tearDown() will dispose of the project and then check for the leaked threads. To avoid
+      // this, we need to wait for the plugin coroutine scope termination.
+      terminatePluginCoroutineScope()
+
       codeInsightTestFixture.tearDown()
     }
   }
@@ -64,5 +72,16 @@ open class PowerShellCodeInsightTestBase {
         }
       }
     }
+  }
+
+  private suspend fun terminatePluginCoroutineScope() {
+    val logger = thisLogger()
+    logger.info("Cancelling the plugin coroutine scope.")
+    val scope = PluginProjectRoot.getInstance(project).coroutineScope
+    scope.cancel()
+    val job = scope.coroutineContext[Job]
+    logger.info("Waiting for the plugin coroutine scope termination. Current status (isActive): ${job?.isActive}.")
+    withTimeout(5.seconds) { job?.join() }
+    logger.info("The plugin coroutine scope has been completed.")
   }
 }
