@@ -69,6 +69,8 @@ class PowerShellJPanelComponent {
     detectedESVersionLabel.text = getLabeledText(version)
     val notEmpty = StringUtil.isNotEmpty(version)
     setVersionLabelVisible(notEmpty)
+    detectedESVersionLabel.isEnabled = notEmpty && isUseLanguageServerCheckBox.isSelected &&
+      !EditorServicesLanguageHostStarter.isUseBundledPowerShellExtension()
   }
 
   fun getPowerShellExtensionPath(): String = psExtensionPathTextField.text.trim()
