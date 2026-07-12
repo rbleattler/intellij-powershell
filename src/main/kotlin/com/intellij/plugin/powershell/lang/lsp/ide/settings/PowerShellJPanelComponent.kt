@@ -59,7 +59,7 @@ class PowerShellJPanelComponent {
     setVersionLabelVisible(false)
     configureExplanationText()
     isUseLanguageServerCheckBox.addChangeListener {
-      allControlsSetEnabled(isUseLanguageServerCheckBox.isSelected)
+      psesConteolsSetEnabled(isUseLanguageServerCheckBox.isSelected)
     }
   }
 
@@ -81,7 +81,7 @@ class PowerShellJPanelComponent {
 
   fun isUseLanguageServerSetSelected(value: Boolean) {
     isUseLanguageServerCheckBox.isSelected = value
-    allControlsSetEnabled(isUseLanguageServerCheckBox.isSelected)
+    psesConteolsSetEnabled(isUseLanguageServerCheckBox.isSelected)
   }
 
   fun powerShellPathTextFieldSetEnabled(isEnabled: Boolean) {
@@ -142,7 +142,7 @@ class PowerShellJPanelComponent {
     detectedESVersionLabel.isVisible = isVisible
   }
 
-  private fun allControlsSetEnabled(value: Boolean) {
+  private fun psesConteolsSetEnabled(value: Boolean) {
     psExtensionPathTextField.isEnabled = value
     explanationTextPane.isEnabled = value
   }
