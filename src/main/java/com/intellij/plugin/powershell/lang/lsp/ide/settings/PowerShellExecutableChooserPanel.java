@@ -8,23 +8,29 @@ import com.intellij.plugin.powershell.ide.MessagesBundle;
 import com.intellij.plugin.powershell.lang.lsp.PowerShellSettings;
 import com.intellij.plugin.powershell.lang.lsp.languagehost.PSLanguageHostUtils;
 import com.intellij.ui.components.JBTextField;
+import com.intellij.util.ui.HTMLEditorKitBuilder;
+import com.intellij.util.ui.UIUtil;
+import com.intellij.xml.util.XmlStringUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import java.awt.*;
 
 public class PowerShellExecutableChooserPanel extends JComponent {
   private final Logger LOG = Logger.getInstance(getClass());
   private JLabel psDetectedVersion;
   private TextFieldWithBrowseButton psExecutablePathTextFieldChooser;
+  private JTextPane psPluginSettingsHintTextPane;
   @SuppressWarnings("unused")
   private JPanel myJpanel;
 
   public PowerShellExecutableChooserPanel(@Nullable String executablePath) {
     String globalSettingsPath = PowerShellSettings.getInstance().getState().getPowerShellExePath();
     updateExecutablePath(StringUtil.isEmpty(executablePath) ? globalSettingsPath : executablePath);
+    configurePluginSettingsHint();
   }
 
   private void createUIComponents() {
@@ -84,6 +90,21 @@ public class PowerShellExecutableChooserPanel extends JComponent {
 
   public void setPowerShellVersionLabelValue(@Nullable String version) {
     psDetectedVersion.setText(getLabeledText(version));
+  }
+
+  public @NotNull JPanel getRootPanel() {
+    return myJpanel;
+  }
+
+  private void configurePluginSettingsHint() {
+    String hintText = MessagesBundle.message("settings.powershell.plugin.settings.hint");
+    psPluginSettingsHintTextPane.setEditorKit(HTMLEditorKitBuilder.simple());
+    psPluginSettingsHintTextPane.setEditable(false);
+    psPluginSettingsHintTextPane.setBackground(UIUtil.getWindowColor());
+    Font defaultFont = psPluginSettingsHintTextPane.getFont();
+    psPluginSettingsHintTextPane.setFont(defaultFont.deriveFont(Font.PLAIN, defaultFont.getSize() - 1f));
+    psPluginSettingsHintTextPane.setForeground(UIUtil.getLabelFontColor(UIUtil.FontColor.BRIGHTER));
+    psPluginSettingsHintTextPane.setText(XmlStringUtil.wrapInHtml(hintText));
   }
 
   @NotNull
