@@ -64,5 +64,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ runner.os }}.test-logs
-          path: build/idea-sandbox/*/log-test
+          path: .intellijPlatform/sandbox/*/*/log-test
         if: ${{ always() }}
