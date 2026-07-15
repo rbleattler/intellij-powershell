@@ -1,5 +1,7 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
+import org.jetbrains.intellij.platform.gradle.tasks.GenerateLexerTask
+import org.jetbrains.intellij.platform.gradle.tasks.GenerateParserTask
 import org.jetbrains.intellij.platform.gradle.tasks.PrepareSandboxTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -11,19 +13,18 @@ plugins {
   id("java")
   alias(libs.plugins.changelog)
   alias(libs.plugins.gradleJvmWrapper)
-  alias(libs.plugins.grammarkit)
+  alias(libs.plugins.intellijGrammarKit)
   alias(libs.plugins.intellijPlatform)
   alias(libs.plugins.kotlin)
 }
 
+val generatedParserSourceBase = layout.buildDirectory.dir("generated/parser")
+val generatedLexerSourceBase = layout.buildDirectory.dir("generated/lexer")
+
 sourceSets {
   main {
-    java.srcDir("src/main/gen-parser")
-    java.srcDir("src/main/gen-lexer")
-    resources {
-      exclude("**.bnf")
-      exclude("**.flex")
-    }
+    java.srcDir(generatedParserSourceBase)
+    java.srcDir(generatedLexerSourceBase)
   }
 }
 
@@ -125,26 +126,18 @@ configurations {
 }
 
 tasks {
-  val resources = file("src/main/resources")
-
-  generateLexer {
-    val genLexerRoot = file("src/main/gen-lexer")
-    val genLexerPackageDirectory = genLexerRoot.resolve("com/intellij/plugin/powershell/lang")
-
+  val generateLexer by existing(GenerateLexerTask::class) {
     purgeOldFiles = true
-    sourceFile = resources.resolve("_PowerShellLexer.flex")
-    targetOutputDir = genLexerPackageDirectory
+    sourceFile = file("src/main/flex/_PowerShellLexer.flex")
+    targetRootOutputDir = generatedLexerSourceBase
+    pathToClass = "com/intellij/plugin/powershell/lang/_PowerShellLexer.java"
     defaultCharacterEncoding = "UTF-8"
   }
 
-  generateParser {
-    val genParserRoot = file("src/main/gen-parser")
-
+  val generateParser by existing(GenerateParserTask::class) {
     purgeOldFiles = true
-    sourceFile = resources.resolve("PowerShell.bnf")
-    targetRootOutputDir = genParserRoot
-    pathToParser = "com/intellij/plugin/powershell/lang/parser"
-    pathToPsiRoot = "com/intellij/plugin/powershell/psi"
+    sourceFile = file("src/main/bnf/PowerShell.bnf")
+    targetRootOutputDir = generatedParserSourceBase
     defaultCharacterEncoding = "UTF-8"
   }
 
