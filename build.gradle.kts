@@ -126,18 +126,20 @@ configurations {
 }
 
 tasks {
-  val generateLexer by existing(GenerateLexerTask::class) {
+  val generateLexer = named<GenerateLexerTask>("generateLexer") {
     purgeOldFiles = true
     sourceFile = file("src/main/flex/_PowerShellLexer.flex")
     targetRootOutputDir = generatedLexerSourceBase
+    outputs.dir(targetRootOutputDir)
     pathToClass = "com/intellij/plugin/powershell/lang/_PowerShellLexer.java"
     defaultCharacterEncoding = "UTF-8"
   }
 
-  val generateParser by existing(GenerateParserTask::class) {
+  val generateParser = named<GenerateParserTask>("generateParser") {
     purgeOldFiles = true
     sourceFile = file("src/main/bnf/PowerShell.bnf")
     targetRootOutputDir = generatedParserSourceBase
+    outputs.dir(targetRootOutputDir)
     defaultCharacterEncoding = "UTF-8"
   }
 
