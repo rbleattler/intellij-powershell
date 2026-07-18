@@ -16,7 +16,6 @@ import com.intellij.execution.runners.AsyncProgramRunner
 import com.intellij.execution.runners.ExecutionEnvironment
 import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.application.EDT
-import com.intellij.openapi.application.UI
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
@@ -116,7 +115,7 @@ suspend fun bootstrapDebugSession(
   launcher.startListening()
 
   val arguments = InitializeRequestArguments()
-  arguments.clientID = "client1" // TODO: should we renumber these?
+  arguments.clientID = "client1" // TODO[#479]: should we renumber these?
   arguments.adapterID = "adapter1"
   arguments.supportsRunInTerminalRequest = false
 
@@ -154,7 +153,7 @@ suspend fun bootstrapDebugSession(
     PowerShellBreakpointType::class.java
   )
 
-  initializeBreakpoints(breakpoints, session, remoteProxy) // TODO: Not needed?
+  initializeBreakpoints(breakpoints, session, remoteProxy) // TODO[#480]: Not needed?
 
   val targetPath = Path(state.runConfiguration.scriptPath)
   launchDebuggee(targetPath, remoteProxy, state.runConfiguration)
