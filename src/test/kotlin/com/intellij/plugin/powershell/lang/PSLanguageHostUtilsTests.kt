@@ -6,8 +6,8 @@
 
 package com.intellij.plugin.powershell.lang
 
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.util.SystemInfo
+import com.intellij.plugin.powershell.ide.findExecutableInPath
 import com.intellij.plugin.powershell.isOnCiServer
 import com.intellij.plugin.powershell.lang.lsp.languagehost.PSLanguageHostUtils
 import com.intellij.plugin.powershell.lang.lsp.languagehost.PSVersionInfo
@@ -49,7 +49,7 @@ class PSLanguageHostUtilsTests {
     if (!SystemInfo.isWindows)
       return
 
-    val executable = findExecutable("powershell")
+    val executable = findExecutableInPath("powershell")
     if (executable == null) {
       if (isOnCiServer) {
         fail("powershell.exe not found on CI environment.")
@@ -66,7 +66,7 @@ class PSLanguageHostUtilsTests {
 
   @Test
   fun testPowerShellCoreVersionDetector() {
-    val executable = findExecutable("pwsh")
+    val executable = findExecutableInPath("pwsh")
     if (executable == null) {
       if (isOnCiServer) {
         fail("PowerShell Core executable not found on CI environment.")
@@ -78,10 +78,6 @@ class PSLanguageHostUtilsTests {
     }
 
     doTest(executable, "[67]\\..+".toRegex(), PowerShellEdition.Core)
-  }
-
-  private fun findExecutable(executableName: String): Path? {
-    return PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS(executableName)?.toPath()
   }
 
   private fun doTest(executable: Path, expectedVersionRegex: Regex, expectedEdition: PowerShellEdition) {

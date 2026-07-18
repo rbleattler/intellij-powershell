@@ -1,11 +1,12 @@
-// SPDX-FileCopyrightText: 2021-2022 Andrey Dernov <https://github.com/ant-druha/>
-// SPDX-FileCopyrightText: 2022-2025 intellij-powershell contributors <https://github.com/intellij-powershell/intellij-powershell>
-//
-// SPDX-License-Identifier: Apache-2.0
+/*
+ * SPDX-FileCopyrightText: 2021-2022 Andrey Dernov <https://github.com/ant-druha/>
+ * SPDX-FileCopyrightText: 2022-2026 intellij-powershell contributors <https://github.com/intellij-powershell/intellij-powershell>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 package com.intellij.plugin.powershell.lang.lsp.ide.settings
 
-import com.intellij.execution.configurations.PathEnvironmentVariableUtil
 import com.intellij.openapi.fileChooser.FileChooserDescriptor
 import com.intellij.openapi.fileChooser.FileChooserFactory
 import com.intellij.openapi.options.ConfigurationException
@@ -14,6 +15,7 @@ import com.intellij.openapi.ui.TextFieldWithBrowseButton
 import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.plugin.powershell.ide.MessagesBundle
+import com.intellij.plugin.powershell.ide.findExecutableInPath
 import com.intellij.plugin.powershell.lang.lsp.PowerShellSettings
 import com.intellij.plugin.powershell.lang.lsp.languagehost.PSLanguageHostUtils.getEditorServicesModuleVersion
 import com.intellij.plugin.powershell.lang.lsp.languagehost.PSLanguageHostUtils.getEditorServicesStartupScript
@@ -50,11 +52,7 @@ object FormUIUtil {
   @Contract("null -> fail")
   @JvmStatic
   fun validatePowerShellExecutablePath(powerShellExePath: String) {
-    val exists = if (FileUtil.isAbsolute(powerShellExePath)) {
-      FileUtil.exists(powerShellExePath)
-    } else {
-      PathEnvironmentVariableUtil.findExecutableInPathOnAnyOS(powerShellExePath) != null
-    }
+    val exists = findExecutableInPath(powerShellExePath) != null
     if (!exists) {
       throw ConfigurationException(
         MessagesBundle.message("settings.errors.executable-not-found", powerShellExePath)
