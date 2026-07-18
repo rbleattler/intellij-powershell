@@ -8,7 +8,7 @@
 package com.intellij.plugin.powershell.lang.lsp.languagehost
 
 import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.openapi.application.PathManager
+import com.intellij.openapi.application.PluginPathManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.plugin.powershell.ide.PluginAppRoot
 import com.intellij.plugin.powershell.ide.run.checkExists
@@ -22,7 +22,10 @@ import java.util.concurrent.CompletableFuture
 
 object PSLanguageHostUtils {
   val LOG: Logger = Logger.getInstance(javaClass)
-  val BUNDLED_PSES_PATH = join(PathManager.getPluginsPath(), "intellij-powershell/lib/LanguageHost")
+  val BUNDLED_PSES_PATH by lazy {
+    PluginPathManager.getPluginResource(PSLanguageHostUtils.javaClass, "lib/LanguageHost")?.path
+      ?: error("Cannot find plugin resources folder.")
+  }
 
   fun getPSExtensionModulesDir(psExtensionDir: String): String {
     return if (isExtensionDirectoryFormat(psExtensionDir)) join(psExtensionDir, "modules")
