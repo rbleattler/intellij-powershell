@@ -1,7 +1,9 @@
-// SPDX-FileCopyrightText: 2018-2021 Andrey Dernov <https://github.com/ant-druha/>
-// SPDX-FileCopyrightText: 2023-2026 intellij-powershell contributors <https://github.com/intellij-powershell/intellij-powershell>
-//
-// SPDX-License-Identifier: Apache-2.0
+/*
+ * SPDX-FileCopyrightText: 2018-2021 Andrey Dernov <https://github.com/ant-druha/>
+ * SPDX-FileCopyrightText: 2023-2026 intellij-powershell contributors <https://github.com/intellij-powershell/intellij-powershell>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 package com.intellij.plugin.powershell.lang.lsp.languagehost
 
@@ -20,7 +22,7 @@ import java.util.concurrent.CompletableFuture
 
 object PSLanguageHostUtils {
   val LOG: Logger = Logger.getInstance(javaClass)
-  val BUNDLED_PSES_PATH = join(PathManager.getPluginsPath(), "PowerShell/lib/LanguageHost")
+  val BUNDLED_PSES_PATH = join(PathManager.getPluginsPath(), "intellij-powershell/lib/LanguageHost")
 
   fun getPSExtensionModulesDir(psExtensionDir: String): String {
     return if (isExtensionDirectoryFormat(psExtensionDir)) join(psExtensionDir, "modules")

@@ -1,7 +1,9 @@
-// SPDX-FileCopyrightText: 2017-2022 Andrey Dernov <https://github.com/ant-druha/>
-// SPDX-FileCopyrightText: 2023-2026 intellij-powershell contributors <https://github.com/intellij-powershell/intellij-powershell>
-//
-// SPDX-License-Identifier: Apache-2.0
+/*
+ * SPDX-FileCopyrightText: 2017-2022 Andrey Dernov <https://github.com/ant-druha/>
+ * SPDX-FileCopyrightText: 2023-2026 intellij-powershell contributors <https://github.com/intellij-powershell/intellij-powershell>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.models.ProductRelease
@@ -186,7 +188,7 @@ tasks {
     }
   }
 
-  fun PrepareSandboxTask.unpackPsScriptAnalyzer(outDir: Provider<String>) {
+  fun PrepareSandboxTask.unpackPsScriptAnalyzer(outDir: String) {
     inputs.files(psScriptAnalyzer)
     inputs.property("hash", psScriptAnalyzerSha256Hash)
 
@@ -195,7 +197,7 @@ tasks {
     }
 
     from(zipTree(psScriptAnalyzer.singleFile)) {
-      into(outDir.map { "$it/PSScriptAnalyzer" })
+      into("$outDir/PSScriptAnalyzer")
 
       // NuGet stuff:
       exclude("_manifest/**", "_rels/**", "package/**", "[Content_Types].xml", "*.nuspec")
@@ -205,7 +207,7 @@ tasks {
     }
   }
 
-  fun PrepareSandboxTask.unpackPowerShellEditorServices(outDir: Provider<String>) {
+  fun PrepareSandboxTask.unpackPowerShellEditorServices(outDir: String) {
     inputs.files(powerShellEditorServices)
     inputs.property("hash", psesSha256Hash)
     doFirst {
@@ -213,14 +215,14 @@ tasks {
     }
 
     from(zipTree(powerShellEditorServices.singleFile)) {
-      into(outDir.map { "$it/" })
+      into(outDir)
       // We only need this module and not anything else from the archive:
       include("PowerShellEditorServices/**")
     }
   }
 
   withType<PrepareSandboxTask> {
-    val outDir = intellijPlatform.pluginConfiguration.name.map { "$it/lib/LanguageHost/modules" }
+    val outDir = "${project.name}/lib/LanguageHost/modules"
     unpackPsScriptAnalyzer(outDir)
     unpackPowerShellEditorServices(outDir)
   }
