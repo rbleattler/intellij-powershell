@@ -1,6 +1,8 @@
-// SPDX-FileCopyrightText: 2023-2025 intellij-powershell contributors <https://github.com/intellij-powershell/intellij-powershell>
-//
-// SPDX-License-Identifier: Apache-2.0
+/*
+ * SPDX-FileCopyrightText: 2023-2026 intellij-powershell contributors <https://github.com/intellij-powershell/intellij-powershell>
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 package com.intellij.plugin.powershell.lang
 
@@ -16,12 +18,31 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
+import kotlin.io.path.Path
+import kotlin.io.path.div
+import kotlin.io.path.exists
 import kotlin.io.path.pathString
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
 @TestApplication
 class PSLanguageHostUtilsTests {
+
+  @Test
+  fun testBundledEditorServicesModulesArePresent() {
+    val bundledPath = Path(PSLanguageHostUtils.BUNDLED_PSES_PATH)
+    val editorServicesModuleDir = bundledPath / "modules" / "PowerShellEditorServices"
+    assertTrue(
+      editorServicesModuleDir.exists(),
+      "Expected bundled EditorServices module directory at ${editorServicesModuleDir.pathString}."
+    )
+
+    val startupScriptPath = Path(PSLanguageHostUtils.getEditorServicesStartupScript(bundledPath.pathString))
+    assertTrue(
+      startupScriptPath.exists(),
+      "Expected bundled EditorServices startup script at ${startupScriptPath.pathString}."
+    )
+  }
 
   @Test
   fun testPowerShell5VersionDetector() {
