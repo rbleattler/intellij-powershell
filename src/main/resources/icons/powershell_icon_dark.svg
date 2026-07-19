@@ -14,7 +14,7 @@
   version="1.1"
   id="svg1"
   inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
-  sodipodi:docname="pluginIcon_dark.svg"
+  sodipodi:docname="powershell_icon_dark.svg"
   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
   xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -32,7 +32,7 @@
      inkscape:document-units="px"
      inkscape:zoom="49.065291"
      inkscape:cx="5.9614443"
-     inkscape:cy="8.6415466"
+     inkscape:cy="8.6619276"
      inkscape:window-width="1916"
      inkscape:window-height="2041"
      inkscape:window-x="3840"
@@ -77,7 +77,7 @@
      id="layer1">
     <path
        id="rect1"
-       style="fill:url(#linearGradient3);stroke:#ced0d6;stroke-width:0.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+       style="fill:url(#linearGradient3);stroke:#ced0d6;stroke-width:1;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
        d="M 3.6324991,2.5 H 14.114501 c 0.483919,0 0.968404,0.418695 0.8735,0.9166665 l -1.747,9.1666655 c -0.09491,0.497973 -0.389581,0.916667 -0.8735,0.916667 H 1.885499 c -0.483919,0 -0.96840436,-0.418695 -0.8735,-0.916667 L 2.7589991,3.4166665 C 2.8538991,2.918695 3.1485801,2.5 3.6324991,2.5 Z"
        sodipodi:nodetypes="sssssssss" />
     <path
