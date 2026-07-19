@@ -71,12 +71,10 @@ The license indication in the project's sources is compliant with the [REUSE spe
 
 Copyright:
 
-- 2015 Microsoft <https://www.microsoft.com/en-us/download/details.aspx?id=50395>
 - 2017-2022 Andrey Dernov <https://github.com/ant-druha/>
 - 2017 Guillaume Tâche
 - 2017-2018 intellij-lsp contributors <https://github.com/gtache/intellij-lsp>
 - 2019-2026 intellij-powershell contributors <https://github.com/intellij-powershell/intellij-powershell>
-- 2024-2026 Friedrich von Never <friedrich@fornever.me>
 
 <!-- REUSE-IgnoreEnd -->
 

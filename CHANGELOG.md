@@ -10,9 +10,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [2.12.0] - 2026-07-19
 ### Changed
+- **Requirement update:** IntelliJ Platform 2026.2 is now the minimal supported version.
 - Migrate Unix socket transport from `com.kohlschutter.junixsocket` to JDK Unix-domain socket APIs.
+- The internal plugin name used for packaging has been adjusted to correspond to the repository name: `PowerShell` → `intellij-powershell`.
+- Update PowerShellEditorServices from v4.3.0 to [v4.7.0](https://github.com/PowerShell/PowerShellEditorServices/releases/tag/v4.7.0).
+- Update the dependencies.
+- [#445](https://github.com/intellij-powershell/intellij-powershell/issues/445): clarify the setting descriptions.
+- [#175](https://github.com/intellij-powershell/intellij-powershell/issues/175): new icons for the plugin and for the PowerShell files.
+
+### Added
+- [#432](https://github.com/intellij-powershell/intellij-powershell/issues/432): Show **Run** button in the file gutter. Thanks to @arpitagarwal1301!
+
+### Fixed
+- [#423: Line comments are not indented](https://github.com/intellij-powershell/intellij-powershell/issues/423). Thanks to @arpitagarwal1301!
+- Minor localization and typographic-related issues in actions.
 
 ## [2.11.0] - 2025-07-05
 ### Changed
@@ -332,4 +345,5 @@ Initial editor and code completion support:
 [2.9.0]: https://github.com/intellij-powershell/intellij-powershell/compare/v2.8.0...v2.9.0
 [2.10.0]: https://github.com/intellij-powershell/intellij-powershell/compare/v2.9.0...v2.10.0
 [2.11.0]: https://github.com/intellij-powershell/intellij-powershell/compare/v2.10.0...v2.11.0
-[Unreleased]: https://github.com/intellij-powershell/intellij-powershell/compare/v2.11.0...HEAD
+[2.12.0]: https://github.com/intellij-powershell/intellij-powershell/compare/v2.11.0...v2.12.0
+[Unreleased]: https://github.com/intellij-powershell/intellij-powershell/compare/v2.12.0...HEAD
