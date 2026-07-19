@@ -17,6 +17,9 @@ on:
 
 jobs:
   publish:
+    permissions:
+      contents: write
+
     runs-on: ubuntu-24.04
     steps:
       - name: Free disk space
