@@ -15,7 +15,7 @@ SPDX-License-Identifier = "Apache-2.0"
 [[annotations]]
 path = ".idea/**/**"
 precedence = "override"
-SPDX-FileCopyrightText = "2024-2026 Friedrich von Never <friedrich@fornever.me>"
+SPDX-FileCopyrightText = "2023-2026 intellij-powershell contributors <https://github.com/intellij-powershell/intellij-powershell>"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
